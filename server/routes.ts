@@ -142,6 +142,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.delete("/api/files/:fileId", async (req, res) => {
+    try {
+      const { fileId } = req.params;
+      await storage.deleteLogFile(fileId);
+      console.log(`Deleted file: ${fileId}`);
+      res.json({ message: "Log file deleted successfully" });
+    } catch (error) {
+      console.error("Delete file error:", error);
+      res.status(500).json({ error: "Failed to delete log file" });
+    }
+  });
+
   app.get("/api/logs/:fileId", async (req, res) => {
     try {
       const { fileId } = req.params;

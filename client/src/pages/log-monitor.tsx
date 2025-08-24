@@ -6,7 +6,7 @@ import { FilterControls } from "../filter-controls";
 import { apiRequest } from "../lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Upload } from "lucide-react";
+import { Upload, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function LogMonitor() {
@@ -80,6 +80,31 @@ export default function LogMonitor() {
     },
   });
 
+  const { mutate: deleteFile } = useMutation({
+    mutationFn: async (fileId: string) => {
+      await apiRequest("DELETE", `/api/files/${fileId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/files"] });
+      if (currentFileId === fileId) {
+        setCurrentFileId(null);
+        setAllLogEntries([]);
+        setOffset(0);
+      }
+      toast({
+        title: "Success",
+        description: "Log file deleted successfully",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to delete log file",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
@@ -107,6 +132,10 @@ export default function LogMonitor() {
     if (currentFileId) {
       window.location.href = `/api/export/${currentFileId}`;
     }
+  };
+
+  const handleDeleteFile = (fileId: string) => {
+    deleteFile(fileId);
   };
 
   useWebSocket({
@@ -140,9 +169,20 @@ export default function LogMonitor() {
             </SelectTrigger>
             <SelectContent className="bg-gray-700 border-gray-600">
               {logFiles?.map((file) => (
-                <SelectItem key={file.id} value={file.id}>
-                  {file.fileName}
-                </SelectItem>
+                <div key={file.id} className="flex items-center justify-between px-2 py-1">
+                  <SelectItem value={file.id} className="flex-1">
+                    {file.fileName}
+                  </SelectItem>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-gray-400 hover:text-red-400 p-1"
+                    onClick={() => handleDeleteFile(file.id)}
+                    data-testid={`delete-file-${file.id}`}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
               ))}
             </SelectContent>
           </Select>

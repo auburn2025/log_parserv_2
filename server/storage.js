@@ -35,6 +35,10 @@ export class MemStorage {
     async clearLogEntries(fileName) {
         this.logEntries.set(fileName, []);
     }
+    async deleteLogFile(fileId) {
+        this.logFiles.delete(fileId);
+        this.logEntries.delete(fileId);
+    }
     async getLogStatistics(fileName) {
         const entries = this.logEntries.get(fileName) || [];
         return {
