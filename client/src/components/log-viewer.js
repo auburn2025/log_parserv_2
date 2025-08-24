@@ -14,9 +14,10 @@ export function LogViewer({ logEntries, isLoading, searchQuery, autoScroll, filt
 
     useEffect(() => {
         if (autoScroll && logEntries.length > lastEntryCountRef.current) {
-            const container = logContainerRef.current?.getElement();
+            const container = logContainerRef.current;
             if (container) {
                 container.scrollTop = container.scrollHeight;
+                console.log("Auto-scrolling to bottom, entries:", logEntries.length);
             }
             setIsStreaming(true);
             const timer = setTimeout(() => setIsStreaming(false), 3000);
@@ -26,7 +27,7 @@ export function LogViewer({ logEntries, isLoading, searchQuery, autoScroll, filt
     }, [logEntries.length, autoScroll]);
 
     useEffect(() => {
-        const container = logContainerRef.current?.getElement();
+        const container = logContainerRef.current;
         if (!container || !onLoadMore || !hasMore) return;
         const handleScroll = () => {
             if (container.scrollTop + container.clientHeight >= container.scrollHeight - 50) {
@@ -203,8 +204,8 @@ export function LogViewer({ logEntries, isLoading, searchQuery, autoScroll, filt
                 ) : (
                     _jsxs(_Fragment, { children: [
                         _jsx(List, { 
-                            width: '100%', 
-                            height: logContainerRef.current?.getElement()?.clientHeight || 600, 
+                            width: logContainerRef.current?.clientWidth || '100%', 
+                            height: logContainerRef.current?.clientHeight || 600, 
                             itemCount: filteredEntries.length, 
                             itemSize: 60, 
                             className: "h-full w-full overflow-y-auto bg-gray-900 text-sm", 
