@@ -48,27 +48,27 @@ export function FilterControls({ filterSettings }: FilterControlsProps) {
   }, [filterSettings]);
 
 const updateFilterMutation = useMutation({
-    mutationFn: async (newSettings: Partial<FilterSettings>) => {
-        console.log("Sending filter settings to server:", newSettings); // Добавляем логирование
-        const response = await apiRequest("POST", "/api/filters", newSettings);
-        return response.json();
-    },
-    onSuccess: (data) => {
-        console.log("Filter settings updated:", data); // Логирование успешного ответа
-        queryClient.invalidateQueries({ queryKey: ["/api/filters"] });
-        toast({
-            title: "Success",
-            description: "Filter settings updated",
-        });
-    },
-    onError: (error) => {
-        console.error("Filter update error:", error); // Логирование ошибки
-        toast({
-            title: "Error",
-            description: "Failed to update filter settings",
-            variant: "destructive",
-        });
-    },
+  mutationFn: async (newSettings: Partial<FilterSettings>) => {
+    console.log("Sending filter settings to server:", newSettings);
+    const response = await apiRequest("POST", "/api/filters", newSettings);
+    return response.json();
+  },
+  onSuccess: (data) => {
+    console.log("Filter settings updated:", data);
+    queryClient.invalidateQueries({ queryKey: ["/api/filters"], refetchType: "all" });
+    toast({
+      title: "Success",
+      description: "Filter settings updated",
+    });
+  },
+  onError: (error) => {
+    console.error("Filter update error:", error);
+    toast({
+      title: "Error",
+      description: "Failed to update filter settings",
+      variant: "destructive",
+    });
+  },
 });
   const handleLevelToggle = (level: string, checked: boolean) => {
     const newLevels = checked 
