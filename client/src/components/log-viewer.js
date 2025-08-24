@@ -14,7 +14,7 @@ export function LogViewer({ logEntries, isLoading, searchQuery, autoScroll, filt
 
     useEffect(() => {
         if (autoScroll && logEntries.length > lastEntryCountRef.current) {
-            const container = logContainerRef.current;
+            const container = logContainerRef.current?.getElement();
             if (container) {
                 container.scrollTop = container.scrollHeight;
             }
@@ -26,16 +26,17 @@ export function LogViewer({ logEntries, isLoading, searchQuery, autoScroll, filt
     }, [logEntries.length, autoScroll]);
 
     useEffect(() => {
-        const container = logContainerRef.current;
+        const container = logContainerRef.current?.getElement();
         if (!container || !onLoadMore || !hasMore) return;
         const handleScroll = () => {
             if (container.scrollTop + container.clientHeight >= container.scrollHeight - 50) {
+                console.log("Triggering load more, current entries:", logEntries.length);
                 onLoadMore();
             }
         };
         container.addEventListener('scroll', handleScroll);
         return () => container.removeEventListener('scroll', handleScroll);
-    }, [onLoadMore, hasMore]);
+    }, [onLoadMore, hasMore, logEntries.length]);
 
     const filteredEntries = useMemo(() => {
         let filtered = logEntries;
@@ -106,7 +107,7 @@ export function LogViewer({ logEntries, isLoading, searchQuery, autoScroll, filt
 
         return (
             _jsxs("div", {
-                style: style,
+                style: { ...style, width: '100%' },
                 className: `flex p-3 hover:bg-gray-800 transition-colors border-l-4 ${borderColor} ${bgColor}`,
                 "data-testid": `log-entry-${entry.lineNumber}`,
                 children: [
@@ -127,7 +128,7 @@ export function LogViewer({ logEntries, isLoading, searchQuery, autoScroll, filt
     };
 
     return (
-        _jsxs("div", { className: "flex flex-col h-full", "data-testid": "log-viewer-container", children: [
+        _jsxs("div", { className: "flex flex-col h-full w-full", "data-testid": "log-viewer-container", children: [
             _jsx("div", { className: "bg-gray-800 border-b border-gray-700 p-4", children: 
                 _jsxs("div", { className: "flex items-center justify-between", children: [
                     _jsxs("div", { className: "flex items-center space-x-4", children: [
@@ -182,7 +183,7 @@ export function LogViewer({ logEntries, isLoading, searchQuery, autoScroll, filt
                     ]})
                 ]})
             }),
-            _jsx("div", { className: "flex-1 overflow-hidden", ref: logContainerRef, children: 
+            _jsx("div", { className: "flex-1 overflow-hidden w-full", ref: logContainerRef, children: 
                 isLoading ? (
                     _jsx("div", { className: "flex items-center justify-center p-8", children: 
                         _jsxs("div", { className: "flex items-center space-x-2 text-gray-400", children: [
@@ -191,7 +192,7 @@ export function LogViewer({ logEntries, isLoading, searchQuery, autoScroll, filt
                         ]})
                     })
                 ) : filteredEntries.length === 0 ? (
-                    _jsx("div", { className: "flex items-center justify-center p-8", children: 
+                    _jsx("div", { className: "flex items-center justify-center p-8 w-full", children: 
                         _jsxs(Card, { className: "bg-gray-800 border-gray-700 p-6 text-center", children: [
                             _jsx("p", { className: "text-gray-400 mb-2", children: "No log entries to display" }),
                             _jsx("p", { className: "text-xs text-gray-500", children: 
@@ -202,11 +203,11 @@ export function LogViewer({ logEntries, isLoading, searchQuery, autoScroll, filt
                 ) : (
                     _jsxs(_Fragment, { children: [
                         _jsx(List, { 
-                            width: logContainerRef.current?.clientWidth || 800, 
-                            height: logContainerRef.current?.clientHeight || 600, 
+                            width: '100%', 
+                            height: logContainerRef.current?.getElement()?.clientHeight || 600, 
                             itemCount: filteredEntries.length, 
                             itemSize: 60, 
-                            className: "h-full overflow-y-auto bg-gray-900 text-sm", 
+                            className: "h-full w-full overflow-y-auto bg-gray-900 text-sm", 
                             children: ({ index, style }) => rowRenderer({ index, style }) 
                         }),
                         hasMore && (

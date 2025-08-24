@@ -147,15 +147,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { fileId } = req.params;
       const { limit = 1000, offset = 0 } = req.query;
 
+      const parsedLimit = parseInt(limit as string) || 1000;
+      const parsedOffset = parseInt(offset as string) || 0;
+
       const entries = await storage.getLogEntries(
         fileId,
-        parseInt(limit as string),
-        parseInt(offset as string),
+        parsedLimit,
+        parsedOffset,
       );
 
-      console.log("Log entries sent to client:", entries.slice(0, 2));
+      console.log(`Log entries sent to client: ${entries.length} entries, offset: ${parsedOffset}, limit: ${parsedLimit}`);
       res.json(entries);
     } catch (error) {
+      console.error("Error fetching log entries:", error);
       res.status(500).json({ error: "Failed to fetch log entries" });
     }
   });
@@ -215,7 +219,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const entries = await storage.getLogEntries(fileId, 10000);
 
       const logFile = await storage.getLogFile(fileId);
-      const fileName = logFile?.fileName || "export salvaged/export.log";
+      const fileName = logFile?.fileName || "export.log";
 
       let content = "";
       entries.forEach((entry) => {

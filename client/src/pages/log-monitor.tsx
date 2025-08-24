@@ -1,200 +1,178 @@
-
-import { useState, useEffect, useCallback } from "react";
-import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
-import { LogWebSocket } from "@/lib/websocket";
-import { Sidebar } from "@/components/sidebar";
-import { LogViewer } from "@/components/log-viewer";
-import { type LogEntry, type ServerStatus, type FilterSettings, type LogFile } from "@shared/schema";
+import { useState, useEffect, useRef } from "react";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
+import { useWebSocket } from "@/hooks/use-websocket";
+import { LogViewer } from "../log-viewer";
+import { FilterControls } from "../filter-controls";
+import { apiRequest } from "../lib/queryClient";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Upload } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function LogMonitor() {
-  const [serverStatus, setServerStatus] = useState<ServerStatus>('disconnected');
-  const [logEntries, setLogEntries] = useState<LogEntry[]>([]);
-  const [currentFile, setCurrentFile] = useState<LogFile | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState("");
   const [autoScroll, setAutoScroll] = useState(true);
-  const [wsConnection, setWsConnection] = useState<LogWebSocket | null>(null);
-  
-  const { toast } = useToast();
+  const [currentFileId, setCurrentFileId] = useState<string | null>(null);
+  const [offset, setOffset] = useState(0);
+  const [allLogEntries, setAllLogEntries] = useState<any[]>([]);
+  const limit = 1000; // Количество записей за один запрос
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
+  const { toast } = useToast();
 
-  // Fetch files
-  const { data: files = [] } = useQuery<LogFile[]>({
-    queryKey: ['/api/files'],
+  const { data: filterSettings } = useQuery({
+    queryKey: ["/api/filters"],
+    queryFn: () => apiRequest("GET", "/api/filters").then(res => res.json()),
   });
 
-  // Fetch filter settings
-  const { data: filterSettings } = useQuery<FilterSettings>({
-    queryKey: ['/api/filters'],
+  const { data: logFiles } = useQuery({
+    queryKey: ["/api/files"],
+    queryFn: () => apiRequest("GET", "/api/files").then(res => res.json()),
   });
 
-  // Log filterSettings for debugging
-  useEffect(() => {
-    console.log('Filter settings:', filterSettings);
-  }, [filterSettings]);
-
-  // Fetch log entries for current file with pagination
-  const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } = useInfiniteQuery({
-    queryKey: ['/api/logs', currentFile?.id],
-    queryFn: async ({ pageParam = 0 }) => {
-      if (!currentFile?.id) return { entries: [], nextOffset: null };
-      const response = await fetch(`/api/logs/${currentFile.id}?limit=1000&offset=${pageParam}`);
-      if (!response.ok) throw new Error('Failed to fetch logs');
-      const entries = await response.json();
-      return { entries, nextOffset: entries.length === 1000 ? pageParam + 1000 : null };
+  const { data: logEntries, isLoading } = useQuery({
+    queryKey: ["/api/logs", currentFileId, offset],
+    queryFn: () =>
+      currentFileId
+        ? apiRequest("GET", `/api/logs/${currentFileId}?limit=${limit}&offset=${offset}`).then(res => res.json())
+        : Promise.resolve([]),
+    enabled: !!currentFileId,
+    onSuccess: (data) => {
+      setAllLogEntries((prev) => {
+        const newEntries = offset === 0 ? data : [...prev, ...data];
+        const uniqueEntries = Array.from(new Map(newEntries.map(entry => [entry.id, entry])).values());
+        console.log(`Loaded ${data.length} entries, total: ${uniqueEntries.length}, offset: ${offset}`);
+        return uniqueEntries;
+      });
     },
-    getNextPageParam: (lastPage) => lastPage.nextOffset,
-    enabled: !!currentFile?.id,
-    onError: (err) => {
+  });
+
+  const totalEntries = logFiles?.find(file => file.id === currentFileId)?.linesProcessed || 0;
+  const hasMore = allLogEntries.length < totalEntries;
+
+  const handleLoadMore = () => {
+    if (!isLoading && hasMore) {
+      setOffset((prev) => prev + limit);
+    }
+  };
+
+  const { mutate: uploadFile } = useMutation({
+    mutationFn: async (formData: FormData) => {
+      const response = await apiRequest("POST", "/api/upload", formData);
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/files"] });
+      setCurrentFileId(data.fileId);
+      setOffset(0);
+      setAllLogEntries([]);
+      toast({
+        title: "Success",
+        description: "File uploaded successfully",
+      });
+    },
+    onError: () => {
       toast({
         title: "Error",
-        description: "Failed to load logs",
+        description: "Failed to upload file",
         variant: "destructive",
       });
     },
   });
 
-  // Update log entries from paginated data
-  useEffect(() => {
-    if (data) {
-      setLogEntries(data.pages.flatMap(page => page.entries).slice(-10000));
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const formData = new FormData();
+      formData.append("logFile", file);
+      uploadFile(formData);
     }
-  }, [data]);
+  };
 
-  // WebSocket handlers
-  const handleLogEntry = useCallback((entry: LogEntry) => {
-    setLogEntries(prev => [...prev, entry].slice(-10000));
-    
-    if (currentFile?.id) {
-      queryClient.invalidateQueries({ queryKey: ['/api/stats', currentFile.id] });
-    }
-  }, [currentFile?.id, queryClient]);
-
-  const handleStatusChange = useCallback((status: ServerStatus) => {
-    setServerStatus(status);
-    
-    if (status === 'connected') {
-      toast({
-        title: "Connected",
-        description: "Real-time log monitoring is active",
-      });
-    } else if (status === 'disconnected') {
-      toast({
-        title: "Disconnected",
-        description: "Connection to server lost",
-        variant: "destructive",
-      });
-    }
-  }, [toast]);
-
-  const handleError = useCallback((error: string) => {
-    toast({
-      title: "Connection Error",
-      description: error,
-      variant: "destructive",
-    });
-  }, [toast]);
-
-  // Initialize WebSocket connection
-  useEffect(() => {
-    const ws = new LogWebSocket(handleLogEntry, handleStatusChange, handleError);
-    ws.connect();
-    setWsConnection(ws);
-
-    return () => {
-      ws.disconnect();
-    };
-  }, [handleLogEntry, handleStatusChange, handleError]);
-
-  // Subscribe to current file when it changes
-  useEffect(() => {
-    if (wsConnection && currentFile?.id) {
-      wsConnection.subscribeToFile(currentFile.id);
-    }
-  }, [wsConnection, currentFile?.id]);
-
-  // Auto-select first file if available
-  useEffect(() => {
-    if (!currentFile && files.length > 0) {
-      setCurrentFile(files[0]);
-    }
-  }, [files, currentFile]);
-
-  const handleFileUpload = useCallback((file: LogFile) => {
-    setCurrentFile(file);
-    setLogEntries([]);
-    queryClient.invalidateQueries({ queryKey: ['/api/files'] });
-    
-    toast({
-      title: "File Uploaded",
-      description: `${file.fileName} has been processed successfully`,
-    });
-  }, [queryClient, toast]);
-
-  const handleClearLogs = useCallback(async () => {
-    if (!currentFile?.id) return;
-
-    try {
-      const response = await fetch(`/api/logs/${currentFile.id}`, {
-        method: 'DELETE',
-      });
-
-      if (response.ok) {
-        setLogEntries([]);
-        queryClient.invalidateQueries({ queryKey: ['/api/logs', currentFile.id] });
-        queryClient.invalidateQueries({ queryKey: ['/api/stats', currentFile.id] });
-        
+  const handleClearLogs = () => {
+    if (currentFileId) {
+      apiRequest("DELETE", `/api/logs/${currentFileId}`).then(() => {
+        queryClient.invalidateQueries({ queryKey: ["/api/logs", currentFileId] });
+        setAllLogEntries([]);
+        setOffset(0);
         toast({
-          title: "Logs Cleared",
-          description: "All log entries have been cleared",
+          title: "Success",
+          description: "Logs cleared successfully",
+        });
+      });
+    }
+  };
+
+  const handleExportLogs = () => {
+    if (currentFileId) {
+      window.location.href = `/api/export/${currentFileId}`;
+    }
+  };
+
+  useWebSocket({
+    url: "/ws/logs",
+    onMessage: (data) => {
+      if (data.type === "logEntry" && data.data.fileName === currentFileId) {
+        queryClient.setQueryData(["/api/logs", currentFileId, offset], (oldData: any[] | undefined) => {
+          const newData = oldData ? [...oldData, data.data] : [data.data];
+          setAllLogEntries((prev) => {
+            const updated = [...prev, data.data];
+            const uniqueEntries = Array.from(new Map(updated.map(entry => [entry.id, entry])).values());
+            console.log(`WebSocket added entry, total: ${uniqueEntries.length}`);
+            return uniqueEntries;
+          });
+          return newData;
         });
       }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to clear logs",
-        variant: "destructive",
-      });
-    }
-  }, [currentFile?.id, queryClient, toast]);
-
-  const handleExportLogs = useCallback(() => {
-    if (!currentFile?.id) return;
-
-    const url = `/api/export/${currentFile.id}`;
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = currentFile.fileName;
-    link.click();
-  }, [currentFile]);
+    },
+  });
 
   return (
-    <div className="flex h-screen bg-gray-900 text-gray-100" data-testid="log-monitor-app">
-      <Sidebar
-        serverStatus={serverStatus}
-        files={files}
-        currentFile={currentFile}
-        filterSettings={filterSettings || { logLevels: [], keywords: [], timeRange: 'all', autoScroll: true }}
-        onFileSelect={setCurrentFile}
-        onFileUpload={handleFileUpload}
-        data-testid="sidebar"
-      />
-      
-      <LogViewer
-        logEntries={logEntries}
-        isLoading={isLoading || isFetchingNextPage}
-        searchQuery={searchQuery}
-        autoScroll={autoScroll}
-        filterSettings={filterSettings}
-        currentFile={currentFile}
-        onSearchChange={setSearchQuery}
-        onAutoScrollToggle={() => setAutoScroll(!autoScroll)}
-        onClearLogs={handleClearLogs}
-        onExportLogs={handleExportLogs}
-        onLoadMore={fetchNextPage}
-        hasMore={hasNextPage}
-        data-testid="log-viewer"
-      />
+    <div className="flex h-screen w-full">
+      <div className="w-80 p-4">
+        <FilterControls filterSettings={filterSettings} />
+      </div>
+      <div className="flex-1 p-4 w-full">
+        <div className="mb-4 flex items-center space-x-4">
+          <Select value={currentFileId ?? undefined} onValueChange={setCurrentFileId}>
+            <SelectTrigger className="w-[200px] bg-gray-700 border-gray-600 text-white">
+              <SelectValue placeholder="Select a log file" />
+            </SelectTrigger>
+            <SelectContent className="bg-gray-700 border-gray-600">
+              {logFiles?.map((file) => (
+                <SelectItem key={file.id} value={file.id}>
+                  {file.fileName}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button onClick={() => fileInputRef.current?.click()}>
+            <Upload className="w-4 h-4 mr-2" />
+            Upload Log
+          </Button>
+          <input
+            type="file"
+            ref={fileInputRef}
+            className="hidden"
+            onChange={handleFileUpload}
+            data-testid="file-upload-input"
+          />
+        </div>
+        <LogViewer
+          logEntries={allLogEntries}
+          isLoading={isLoading}
+          searchQuery={searchQuery}
+          autoScroll={autoScroll}
+          filterSettings={filterSettings}
+          currentFile={logFiles?.find(file => file.id === currentFileId)}
+          onSearchChange={setSearchQuery}
+          onAutoScrollToggle={() => setAutoScroll(!autoScroll)}
+          onClearLogs={handleClearLogs}
+          onExportLogs={handleExportLogs}
+          onLoadMore={handleLoadMore}
+          hasMore={hasMore}
+        />
+      </div>
     </div>
   );
 }
