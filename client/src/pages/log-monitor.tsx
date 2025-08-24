@@ -1,12 +1,11 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { useWebSocket } from "@/hooks/use-websocket";
 import { LogViewer } from "../log-viewer";
 import { FilterControls } from "../filter-controls";
 import { apiRequest } from "../lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Upload, Trash2 } from "lucide-react";
+import { Upload, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function LogMonitor() {
@@ -84,7 +83,7 @@ export default function LogMonitor() {
     mutationFn: async (fileId: string) => {
       await apiRequest("DELETE", `/api/files/${fileId}`);
     },
-    onSuccess: () => {
+    onSuccess: (_data, fileId) => {
       queryClient.invalidateQueries({ queryKey: ["/api/files"] });
       if (currentFileId === fileId) {
         setCurrentFileId(null);
@@ -173,15 +172,19 @@ export default function LogMonitor() {
                   <SelectItem value={file.id} className="flex-1">
                     {file.fileName}
                   </SelectItem>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-gray-400 hover:text-red-400 p-1"
-                    onClick={() => handleDeleteFile(file.id)}
-                    data-testid={`delete-file-${file.id}`}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
+                  <div className="flex items-center space-x-2">
+                    <span className={`text-xs ${file.status === 'active' ? 'text-green-400' : 'text-gray-400'}`}>
+                      {file.status}
+                    </span>
+                    <button
+                      className="text-red-400 hover:text-red-600 p-1"
+                      onClick={() => handleDeleteFile(file.id)}
+                      data-testid={`delete-file-${file.id}`}
+                      title="Delete log file"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
                 </div>
               ))}
             </SelectContent>
