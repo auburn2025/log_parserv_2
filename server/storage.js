@@ -1,4 +1,5 @@
 import { randomUUID } from "crypto";
+
 export class MemStorage {
     logEntries;
     logFiles;
@@ -8,14 +9,14 @@ export class MemStorage {
         this.logFiles = new Map();
         this.filterSettings = new Map();
     }
-async getLogEntries(fileName, limit = 1000, offset = 0) {
-    const entries = this.logEntries.get(fileName) || [];
-    return entries.slice(offset, offset + limit).map(entry => ({
-        ...entry,
-        level: entry.level.toUpperCase(), // Приводим level к верхнему регистру
-        timestamp: typeof entry.timestamp === 'string' ? entry.timestamp : entry.timestamp.toISOString() // Гарантируем строку для timestamp
-    }));
-}
+    async getLogEntries(fileName, limit = 1000, offset = 0) {
+        const entries = this.logEntries.get(fileName) || [];
+        return entries.slice(offset, offset + limit).map(entry => ({
+            ...entry,
+            level: entry.level.toUpperCase(),
+            timestamp: typeof entry.timestamp === 'string' ? entry.timestamp : entry.timestamp.toISOString()
+        }));
+    }
     async createLogEntry(insertEntry) {
         const id = randomUUID();
         const entry = {
@@ -38,8 +39,8 @@ async getLogEntries(fileName, limit = 1000, offset = 0) {
         const entries = this.logEntries.get(fileName) || [];
         return {
             total: entries.length,
-            errors: entries.filter(e => e.level === "ERROR").length,
-            warnings: entries.filter(e => e.level === "WARN").length,
+            errors: entries.filter(e => e.level.toUpperCase() === "ERROR").length,
+            warnings: entries.filter(e => e.level.toUpperCase() === "WARN").length,
         };
     }
     async getLogFiles() {
@@ -85,4 +86,5 @@ async getLogEntries(fileName, limit = 1000, offset = 0) {
         return settings;
     }
 }
+
 export const storage = new MemStorage();

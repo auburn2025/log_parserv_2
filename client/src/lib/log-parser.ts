@@ -11,13 +11,24 @@ export interface ParsedLogEntry {
 
 // Regex patterns for common Tomcat log formats
 const TOMCAT_PATTERNS = [
-  // Формат: YYYY-MM-DD HH:mm:ss,SSS [LEVEL] [logger] message
-  /^(\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2},\d{3})\s+(ERROR|WARN|INFO|DEBUG)\s+main\s+(.+)$/,
+  // Формат: YYYY-MM-DD HH:mm:ss,SSS main LEVEL message
+  /^(\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2},\d{3})\s+main\s+(ERROR|WARN|INFO|DEBUG)\s+(.+)$/,
   // Формат: DD.MM.YY HH:mm:ss:SSS - LEVEL - LOGGER - MESSAGE
   /^(\d{2}\.\d{2}\.\d{2}\s\d{2}:\d{2}:\d{2}:\d{3})\s*-\s*(ERROR|WARN|INFO|DEBUG)\s*-\s*([\w.-]+)\s*-\s*(.+)$/,
   // Java stack trace line
   /^\s+(at\s+.+|Caused\s+by:.+|\.{3}\s+\d+\s+more|\s+.*Exception.*)$/,
 ];
+
+export type LogLevel = 'ERROR' | 'WARN' | 'INFO' | 'DEBUG';
+
+export interface ParsedLogEntry {
+  lineNumber: number;
+  timestamp: Date;
+  level: LogLevel;
+  message: string;
+  logger?: string;
+  stackTrace?: string;
+}
 
 export function parseLogLine(line: string, lineNumber: number): ParsedLogEntry {
   line = line.trim();
@@ -47,7 +58,7 @@ export function parseLogLine(line: string, lineNumber: number): ParsedLogEntry {
         console.log(`Parsed line ${lineNumber}:`, { timestamp: timestampStr, level: match[2], logger: match[3], message: match[4] });
         return {
           lineNumber,
-          timestamp: new Date(timestampStr.replace(':', '.')),
+          timestamp: new Date(timestampStr),
           level: match[2].toUpperCase() as LogLevel,
           logger: match[3],
           message: match[4],
@@ -79,27 +90,27 @@ export function parseLogLine(line: string, lineNumber: number): ParsedLogEntry {
   };
 }
 
-export function highlightKeywords(text: string, keywords: string[]): string {
-  if (!keywords.length || !text) return text;
-  
-  const regex = new RegExp(
-    keywords.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'),
-    'gi'
-  );
-  return text.replace(regex, '<mark class="bg-purple-500 text-white px-1 rounded">$&</mark>');
+export function formatLogLevel(level: string): { color: string; bgColor: string; borderColor: string } {
+  switch (level.toUpperCase()) {
+    case 'ERROR':
+      return { color: 'text-red-400', bgColor: 'bg-red-500/10', borderColor: 'border-red-500' };
+    case 'WARN':
+      return { color: 'text-amber-400', bgColor: 'bg-amber-500/10', borderColor: 'border-amber-500' };
+    case 'INFO':
+      return { color: 'text-blue-400', bgColor: 'bg-blue-500/10', borderColor: 'border-blue-500' };
+    case 'DEBUG':
+      return { color: 'text-gray-400', bgColor: 'bg-gray-500/10', borderColor: 'border-gray-500' };
+    default:
+      return { color: 'text-gray-400', bgColor: 'bg-gray-500/10', borderColor: 'border-gray-500' };
+  }
 }
 
-export function formatLogLevel(level: LogLevel): { color: string; bgColor: string; borderColor: string } {
-  switch (level) {
-    case 'ERROR':
-      return { color: 'text-red-400', bgColor: 'bg-red-900/20', borderColor: 'border-red-500' };
-    case 'WARN':
-      return { color: 'text-amber-400', bgColor: 'bg-amber-900/20', borderColor: 'border-amber-500' };
-    case 'INFO':
-      return { color: 'text-blue-400', bgColor: '', borderColor: 'border-transparent' };
-    case 'DEBUG':
-      return { color: 'text-gray-400', bgColor: '', borderColor: 'border-transparent' };
-    default:
-      return { color: 'text-gray-400', bgColor: '', borderColor: 'border-transparent' };
+export function highlightKeywords(text: string, keywords: string[]): string {
+  if (!keywords?.length) return text;
+  let highlighted = text;
+  for (const keyword of keywords) {
+    const regex = new RegExp(`(${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+    highlighted = highlighted.replace(regex, '<span class="bg-amber-500/20 text-amber-300">$1</span>');
   }
+  return highlighted;
 }

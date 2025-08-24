@@ -12,7 +12,6 @@ export function LogViewer({ logEntries, isLoading, searchQuery, autoScroll, filt
     const logContainerRef = useRef(null);
     const lastEntryCountRef = useRef(0);
 
-    // Auto-scroll to bottom when new entries arrive
     useEffect(() => {
         if (autoScroll && logEntries.length > lastEntryCountRef.current) {
             const container = logContainerRef.current;
@@ -26,7 +25,6 @@ export function LogViewer({ logEntries, isLoading, searchQuery, autoScroll, filt
         lastEntryCountRef.current = logEntries.length;
     }, [logEntries.length, autoScroll]);
 
-    // Infinite scroll
     useEffect(() => {
         const container = logContainerRef.current;
         if (!container || !onLoadMore || !hasMore) return;
@@ -39,57 +37,51 @@ export function LogViewer({ logEntries, isLoading, searchQuery, autoScroll, filt
         return () => container.removeEventListener('scroll', handleScroll);
     }, [onLoadMore, hasMore]);
 
-    // Filter and search log entries
     const filteredEntries = useMemo(() => {
-    let filtered = logEntries;
+        let filtered = logEntries;
 
-    // Логирование для отладки
-    console.log("Log entries (first 5):", logEntries.slice(0, 5).map(entry => ({
-        lineNumber: entry.lineNumber,
-        level: entry.level,
-        timestamp: entry.timestamp,
-        message: entry.message
-    })));
-    console.log("Filter settings:", filterSettings);
+        console.log("Log entries (first 5):", logEntries.slice(0, 5).map(entry => ({
+            lineNumber: entry.lineNumber,
+            level: entry.level,
+            timestamp: entry.timestamp,
+            message: entry.message
+        })));
+        console.log("Filter settings:", filterSettings);
 
-    // Filter by log levels
-    if (filterSettings?.logLevels && filterSettings.logLevels.length > 0) {
-        filtered = filtered.filter(entry => {
-            const matches = filterSettings.logLevels.includes(entry.level.toUpperCase());
-            console.log(`Checking entry level: ${entry.level}, matches: ${matches}`);
-            return matches;
-        });
-    }
-    // Filter by search query
-    if (searchQuery.trim()) {
-        const query = searchQuery.toLowerCase();
-        filtered = filtered.filter(entry => 
-            (entry.message?.toLowerCase().includes(query) ?? false) ||
-            (entry.logger?.toLowerCase().includes(query) ?? false) ||
-            (entry.stackTrace?.toLowerCase().includes(query) ?? false)
-        );
-    }
-    // Filter by keywords
-    if (filterSettings?.keywords?.length) {
-        filtered = filtered.filter(entry => 
-            filterSettings.keywords.some(keyword => 
-                (entry.message?.toLowerCase().includes(keyword.toLowerCase()) ?? false) ||
-                (entry.logger?.toLowerCase().includes(keyword.toLowerCase()) ?? false) ||
-                (entry.stackTrace?.toLowerCase().includes(keyword.toLowerCase()) ?? false)
-            )
-        );
-    }
-    // Filter by timeRange
-    if (filterSettings?.timeRange && filterSettings.timeRange !== 'all') {
-        const [start, end] = filterSettings.timeRange.split(':');
-        filtered = filtered.filter(entry => {
-            const timestamp = new Date(entry.timestamp);
-            return timestamp >= new Date(start) && timestamp <= new Date(end);
-        });
-    }
-    console.log("Filtered entries count:", filtered.length);
-    return filtered;
-}, [logEntries, filterSettings?.logLevels, filterSettings?.keywords, filterSettings?.timeRange, searchQuery]);
+        if (filterSettings?.logLevels && filterSettings.logLevels.length > 0) {
+            filtered = filtered.filter(entry => {
+                const matches = filterSettings.logLevels.includes(entry.level.toUpperCase());
+                console.log(`Checking entry level: ${entry.level}, matches: ${matches}`);
+                return matches;
+            });
+        }
+        if (searchQuery.trim()) {
+            const query = searchQuery.toLowerCase();
+            filtered = filtered.filter(entry => 
+                (entry.message?.toLowerCase().includes(query) ?? false) ||
+                (entry.logger?.toLowerCase().includes(query) ?? false) ||
+                (entry.stackTrace?.toLowerCase().includes(query) ?? false)
+            );
+        }
+        if (filterSettings?.keywords?.length) {
+            filtered = filtered.filter(entry => 
+                filterSettings.keywords.some(keyword => 
+                    (entry.message?.toLowerCase().includes(keyword.toLowerCase()) ?? false) ||
+                    (entry.logger?.toLowerCase().includes(keyword.toLowerCase()) ?? false) ||
+                    (entry.stackTrace?.toLowerCase().includes(keyword.toLowerCase()) ?? false)
+                )
+            );
+        }
+        if (filterSettings?.timeRange && filterSettings.timeRange !== 'all') {
+            const [start, end] = filterSettings.timeRange.split(':');
+            filtered = filtered.filter(entry => {
+                const timestamp = new Date(entry.timestamp);
+                return timestamp >= new Date(start) && timestamp <= new Date(end);
+            });
+        }
+        console.log("Filtered entries count:", filtered.length);
+        return filtered;
+    }, [logEntries, filterSettings?.logLevels, filterSettings?.keywords, filterSettings?.timeRange, searchQuery]);
 
     const rowRenderer = ({ index, style }) => {
         const entry = filteredEntries[index];
@@ -103,12 +95,10 @@ export function LogViewer({ logEntries, isLoading, searchQuery, autoScroll, filt
         const highlightedStackTrace = filterSettings?.keywords?.length && entry.stackTrace
             ? highlightKeywords(entry.stackTrace, filterSettings.keywords)
             : entry.stackTrace;
-        // Безопасное форматирование timestamp
         let formattedTimestamp;
         if (entry.timestamp instanceof Date) {
             formattedTimestamp = entry.timestamp.toISOString().slice(0, 19).replace('T', ' ');
         } else if (typeof entry.timestamp === 'string') {
-            // Если timestamp — строка, используем её напрямую или преобразуем в нужный формат
             formattedTimestamp = entry.timestamp.slice(0, 19).replace('T', ' ');
         } else {
             formattedTimestamp = 'Invalid timestamp';

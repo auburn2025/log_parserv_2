@@ -32,7 +32,6 @@ export function FilterControls({ filterSettings }: FilterControlsProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Initialize state from settings
   useEffect(() => {
     if (filterSettings) {
       setSelectedLevels(filterSettings.logLevels || ["ERROR", "WARN", "INFO", "DEBUG"]);
@@ -47,29 +46,30 @@ export function FilterControls({ filterSettings }: FilterControlsProps) {
     }
   }, [filterSettings]);
 
-const updateFilterMutation = useMutation({
-  mutationFn: async (newSettings: Partial<FilterSettings>) => {
-    console.log("Sending filter settings to server:", newSettings);
-    const response = await apiRequest("POST", "/api/filters", newSettings);
-    return response.json();
-  },
-  onSuccess: (data) => {
-    console.log("Filter settings updated:", data);
-    queryClient.invalidateQueries({ queryKey: ["/api/filters"], refetchType: "all" });
-    toast({
-      title: "Success",
-      description: "Filter settings updated",
-    });
-  },
-  onError: (error) => {
-    console.error("Filter update error:", error);
-    toast({
-      title: "Error",
-      description: "Failed to update filter settings",
-      variant: "destructive",
-    });
-  },
-});
+  const updateFilterMutation = useMutation({
+    mutationFn: async (newSettings: Partial<FilterSettings>) => {
+      console.log("Sending filter settings to server:", newSettings);
+      const response = await apiRequest("POST", "/api/filters", newSettings);
+      return response.json();
+    },
+    onSuccess: (data) => {
+      console.log("Filter settings updated:", data);
+      queryClient.invalidateQueries({ queryKey: ["/api/filters"], refetchType: "all" });
+      toast({
+        title: "Success",
+        description: "Filter settings updated",
+      });
+    },
+    onError: (error) => {
+      console.error("Filter update error:", error);
+      toast({
+        title: "Error",
+        description: "Failed to update filter settings",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleLevelToggle = (level: string, checked: boolean) => {
     const newLevels = checked 
       ? [...selectedLevels, level]
@@ -102,51 +102,30 @@ const updateFilterMutation = useMutation({
     updateFilterMutation.mutate({ keywords: newKeywords });
   };
 
-  const handleTimeRangeChange = (value: "all" | "1h" | "6h" | "24h" | "custom") => {
-    setTimeRange(value);
-    let newTimeRange: string = value;
-    if (value !== "custom") {
-      const now = new Date();
-      let start: Date;
-      switch (value) {
-        case "1h":
-          start = new Date(now.getTime() - 60 * 60 * 1000);
-          newTimeRange = `${start.toISOString()}:${now.toISOString()}`;
-          break;
-        case "6h":
-          start = new Date(now.getTime() - 6 * 60 * 60 * 1000);
-          newTimeRange = `${start.toISOString()}:${now.toISOString()}`;
-          break;
-        case "24h":
-          start = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-          newTimeRange = `${start.toISOString()}:${now.toISOString()}`;
-          break;
-        case "all":
-          newTimeRange = "all";
-          break;
-      }
-    }
-    updateFilterMutation.mutate({ timeRange: newTimeRange });
-  };
-
-  const handleCustomRangeChange = () => {
-    if (customStart && customEnd) {
-      updateFilterMutation.mutate({ timeRange: `${customStart}:${customEnd}` });
-    }
-  };
-
-  const handleKeywordInputKeyPress = (event: React.KeyboardEvent) => {
-    if (event.key === "Enter") {
-      event.preventDefault();
+  const handleKeywordInputKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
       handleAddKeyword();
     }
   };
 
+  const handleTimeRangeChange = (value: "all" | "1h" | "6h" | "24h" | "custom") => {
+    setTimeRange(value);
+    if (value !== "custom") {
+      const timeRangeValue = value === "all" ? "all" : value;
+      updateFilterMutation.mutate({ timeRange: timeRangeValue });
+    }
+  };
+
+  const handleCustomRangeChange = () => {
+    if (customStart && customEnd) {
+      const timeRangeValue = `${customStart}:${customEnd}`;
+      updateFilterMutation.mutate({ timeRange: timeRangeValue });
+    }
+  };
+
   return (
-    <div className="p-4 border-b border-gray-700">
+    <div className="p-4 bg-gray-800 rounded-lg">
       <h3 className="text-sm font-semibold text-gray-300 mb-3">Filters & Highlighting</h3>
-      
-      {/* Log Level Filters */}
       <div className="mb-4">
         <label className="text-xs font-medium text-gray-400 mb-2 block">Log Levels</label>
         <div className="space-y-2">
@@ -154,7 +133,7 @@ const updateFilterMutation = useMutation({
             <div key={value} className="flex items-center space-x-2 cursor-pointer">
               <Checkbox
                 checked={selectedLevels.includes(value)}
-                onCheckedChange={(checked) => handleLevelToggle(value, checked as boolean)}
+                onCheckedChange={(checked) => handleLevelToggle(value, checked)}
                 className="data-[state=checked]:bg-primary-500 data-[state=checked]:border-primary-500"
                 data-testid={`checkbox-${value.toLowerCase()}`}
               />
@@ -164,8 +143,6 @@ const updateFilterMutation = useMutation({
           ))}
         </div>
       </div>
-
-      {/* Custom Keywords */}
       <div className="mb-4">
         <label className="text-xs font-medium text-gray-400 mb-2 block">Custom Keywords</label>
         <div className="flex space-x-2 mb-2">
@@ -190,7 +167,6 @@ const updateFilterMutation = useMutation({
             )}
           </Button>
         </div>
-        
         {keywords.length > 0 && (
           <div className="space-y-1">
             {keywords.map((keyword) => (
@@ -215,8 +191,6 @@ const updateFilterMutation = useMutation({
           </div>
         )}
       </div>
-
-      {/* Time Range Filter */}
       <div className="mb-4">
         <label className="text-xs font-medium text-gray-400 mb-2 block">Time Range</label>
         <Select value={timeRange} onValueChange={handleTimeRangeChange}>

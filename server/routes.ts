@@ -23,7 +23,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     path: "/ws/logs",
   });
 
-  // WebSocket connection handling
   wss.on("connection", (ws) => {
     console.log("Client connected");
 
@@ -31,7 +30,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const data = JSON.parse(message.toString());
 
       if (data.type === "subscribe" && data.fileName) {
-        // Store the subscription for this client
         (ws as any).subscribedFile = data.fileName;
         ws.send(
           JSON.stringify({ type: "subscribed", fileName: data.fileName }),
@@ -43,12 +41,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log("Client disconnected");
     });
 
-    // Send initial connection status
     ws.send(JSON.stringify({ type: "status", status: "connected" }));
   });
 
-  // Broadcast new log entries to subscribed clients
   const broadcast = (fileName: string, logEntry: any) => {
+    console.log("Broadcasting log entry:", { fileName, logEntry });
     wss.clients.forEach((client) => {
       if ((client as any).subscribedFile === fileName) {
         client.send(JSON.stringify({ type: "logEntry", data: logEntry }));
@@ -56,7 +53,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   };
 
-  // File upload endpoint
   app.post("/api/upload", upload.single("logFile"), async (req, res) => {
     try {
       if (!req.file) {
@@ -66,46 +62,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const fileName = req.file.originalname;
       const fileSize = req.file.size;
 
-      // Create log file record
       const logFile = await storage.createLogFile({
         fileName,
         fileSize,
         status: "processing",
       });
 
-      // Parse the uploaded file
       const filePath = req.file.path;
       const fileBuffer = fs.readFileSync(filePath);
 
-      // Detect encoding
       const detected = jschardet.detect(fileBuffer);
       const encoding = detected.encoding || "utf-8";
-      console.log(
-        `Detected encoding: ${encoding} (confidence: ${detected.confidence})`,
-      );
+      console.log(`Detected encoding: ${encoding} (confidence: ${detected.confidence})`);
 
-      // Convert to UTF-8 if needed
       let fileContent: string;
-      if (
-        encoding.toLowerCase().includes("windows-1251") ||
-        encoding.toLowerCase().includes("cp1251")
-      ) {
+      if (encoding.toLowerCase().includes("windows-1251") || encoding.toLowerCase().includes("cp1251")) {
         fileContent = iconv.decode(fileBuffer, "win1251");
-      } else if (
-        encoding.toLowerCase().includes("cp866") ||
-        encoding.toLowerCase().includes("ibm866")
-      ) {
+      } else if (encoding.toLowerCase().includes("cp866") || encoding.toLowerCase().includes("ibm866")) {
         fileContent = iconv.decode(fileBuffer, "cp866");
       } else if (encoding.toLowerCase().includes("koi8")) {
         fileContent = iconv.decode(fileBuffer, "koi8-r");
       } else {
-        // Default to UTF-8
         fileContent = iconv.decode(fileBuffer, "utf8");
       }
 
       const lines = fileContent.split("\n");
-
+      console.log(`📝 Total lines in file: ${lines.length}`);
       let lineNumber = 1;
+      let errorCount = 0;
+
       for (const line of lines) {
         if (line.trim()) {
           try {
@@ -114,27 +99,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
               ...parsed,
               fileName: logFile.id,
             });
-
-            // Broadcast to connected clients
             broadcast(logFile.id, logEntry);
           } catch (parseError) {
-            console.warn(`Failed to parse line ${lineNumber}: ${line}`);
+            console.warn(`⚠ Failed to parse line ${lineNumber}: ${line} - Error: ${parseError.message}`);
+            errorCount++;
+            const logEntry = await storage.createLogEntry({
+              lineNumber,
+              timestamp: new Date(),
+              level: 'INFO',
+              message: line,
+              fileName: logFile.id,
+            });
+            broadcast(logFile.id, logEntry);
           }
           lineNumber++;
         }
       }
 
-      // Update file status
       await storage.updateLogFileStatus(logFile.id, "active");
-
-      // Clean up uploaded file
       fs.unlinkSync(filePath);
 
+      console.log(`✅ File processing completed: ${lineNumber - 1} lines processed, ${errorCount} errors`);
       res.json({
         message: "File uploaded and processed successfully",
         fileId: logFile.id,
         fileName: logFile.fileName,
         linesProcessed: lineNumber - 1,
+        errors: errorCount,
       });
     } catch (error) {
       console.error("Upload error:", error);
@@ -142,7 +133,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get log files
   app.get("/api/files", async (req, res) => {
     try {
       const files = await storage.getLogFiles();
@@ -152,7 +142,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get log entries
   app.get("/api/logs/:fileId", async (req, res) => {
     try {
       const { fileId } = req.params;
@@ -164,13 +153,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         parseInt(offset as string),
       );
 
+      console.log("Log entries sent to client:", entries.slice(0, 2));
       res.json(entries);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch log entries" });
     }
   });
 
-  // Clear log entries
   app.delete("/api/logs/:fileId", async (req, res) => {
     try {
       const { fileId } = req.params;
@@ -181,7 +170,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get log statistics
   app.get("/api/stats/:fileId", async (req, res) => {
     try {
       const { fileId } = req.params;
@@ -192,7 +180,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get filter settings
   app.get("/api/filters", async (req, res) => {
     try {
       const settings = await storage.getFilterSettings();
@@ -209,26 +196,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Update filter settings
   app.post("/api/filters", async (req, res) => {
     try {
+      console.log("Received filter settings:", req.body);
       const validatedData = insertFilterSettingsSchema.parse(req.body);
-      const settings =
-        await storage.createOrUpdateFilterSettings(validatedData);
+      const settings = await storage.createOrUpdateFilterSettings(validatedData);
+      console.log("Filter settings updated:", settings);
       res.json(settings);
     } catch (error) {
+      console.error("Filter update error:", error);
       res.status(500).json({ error: "Failed to update filter settings" });
     }
   });
 
-  // Export logs
   app.get("/api/export/:fileId", async (req, res) => {
     try {
       const { fileId } = req.params;
-      const entries = await storage.getLogEntries(fileId, 10000); // Export up to 10k entries
+      const entries = await storage.getLogEntries(fileId, 10000);
 
       const logFile = await storage.getLogFile(fileId);
-      const fileName = logFile?.fileName || "export.log";
+      const fileName = logFile?.fileName || "export salvaged/export.log";
 
       let content = "";
       entries.forEach((entry) => {
@@ -251,4 +238,3 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   return httpServer;
 }
-        
